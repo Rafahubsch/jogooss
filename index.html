@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stack Ball 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            background: #111827;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            outline: none;
+        }
+        .fever-bar-fill {
+            transition: width 0.1s linear;
+        }
+        .text-glow {
+            text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+        }
+        .fire-glow {
+            text-shadow: 0 0 15px rgba(249, 115, 22, 0.9), 0 0 25px rgba(239, 68, 68, 0.8);
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none bg-gray-900">
+
+    <!-- Container do Canvas 3D -->
+    <div id="canvas-container" class="absolute inset-0 w-full h-full z-0"></div>
+
+    <!-- UI Overlay principal -->
+    <div id="ui-layer" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 sm:p-6">
+        
+        <!-- Topo: Barra de Nível e Pontuação -->
+        <div class="flex flex-col items-center w-full max-w-md mx-auto gap-2">
+            <!-- Score e Recorde -->
+            <div class="flex justify-between w-full px-4 text-white font-bold text-lg drop-shadow-md">
+                <div>PONTOS: <span id="score-text" class="text-yellow-400 text-2xl">0</span></div>
+                <div id="boss-badge" class="hidden bg-gradient-to-r from-amber-500 to-red-600 text-white text-xs font-black px-2.5 py-1 rounded-full animate-bounce shadow-lg border border-yellow-300">
+                    🔥 FASE CHEFÃO
+                </div>
+                <div>RECORDE: <span id="high-score-text" class="text-gray-300">0</span></div>
+            </div>
+
+            <!-- Barra de Progresso do Nível -->
+            <div class="flex items-center w-full gap-3 bg-gray-800/80 backdrop-blur-md p-2 rounded-full border border-gray-700 shadow-lg">
+                <div id="level-current" class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow">1</div>
+                <div class="flex-1 flex flex-col justify-center">
+                    <div class="flex justify-between text-[10px] font-bold text-gray-400 px-1 mb-0.5">
+                        <span id="level-title-text">FASE 1 DE 100</span>
+                        <span id="level-percent-text">0%</span>
+                    </div>
+                    <div class="bg-gray-700 h-3.5 rounded-full overflow-hidden p-0.5 border border-gray-600">
+                        <div id="level-progress-bar" class="bg-gradient-to-r from-emerald-400 to-green-500 h-full rounded-full w-0 transition-all duration-150"></div>
+                    </div>
+                </div>
+                <div id="level-next" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 font-bold text-sm border border-gray-600">2</div>
+            </div>
+
+            <!-- Barra de FEVER / MODO FOGO -->
+            <div id="fever-container" class="w-full max-w-xs bg-gray-800/80 backdrop-blur-md p-1.5 rounded-full border border-orange-500/30 opacity-90 transition-all duration-300">
+                <div class="flex justify-between items-center px-2 mb-1">
+                    <span id="fever-label" class="text-xs font-bold text-orange-400 tracking-wider">PODER DE FOGO</span>
+                    <span id="fever-percent" class="text-xs font-bold text-orange-300">0%</span>
+                </div>
+                <div class="w-full bg-gray-900 h-2.5 rounded-full overflow-hidden p-0.5">
+                    <div id="fever-bar" class="fever-bar-fill bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 h-full rounded-full w-0"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Combo Feedback Flutuante -->
+        <div class="flex justify-center items-center">
+            <div id="combo-text" class="opacity-0 transform scale-50 transition-all duration-200 text-3xl sm:text-5xl font-black text-amber-400 tracking-wider fire-glow">
+                COMBO x2!
+            </div>
+        </div>
+
+        <!-- Dica do Rodapé -->
+        <div id="footer-hint" class="text-center text-gray-300/80 font-medium text-sm sm:text-base pb-2">
+            Pressione <span class="bg-gray-800 px-2 py-1 rounded text-white border border-gray-600 font-mono">ESPAÇO</span> ou <span class="bg-gray-800 px-2 py-1 rounded text-white border border-gray-600">CLIQUE/TOQUE</span> para destruir
+        </div>
+    </div>
+
+    <!-- Tela Inicial / Tap to Start -->
+    <div id="start-screen" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm cursor-pointer">
+        <div class="text-center p-6 rounded-3xl bg-gray-900/90 border border-gray-700/80 shadow-2xl max-w-sm mx-4 transform hover:scale-105 transition-transform">
+            <h1 class="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 mb-2">
+                STACK BALL
+            </h1>
+            <p class="text-gray-300 text-sm mb-4">Quebre as plataformas, evite as partes pretas e vença as 100 fases!</p>
+            
+            <div class="flex flex-col gap-3">
+                <div class="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-extrabold text-xl rounded-2xl shadow-lg border-b-4 border-green-800 animate-pulse">
+                    SEGURE PARA JOGAR
+                </div>
+
+                <button id="btn-open-levels" class="pointer-events-auto py-2.5 px-6 bg-gray-800 hover:bg-gray-700 text-yellow-400 font-bold text-sm rounded-xl border border-gray-600 shadow transition-all">
+                    🗺️ SELECIONAR FASES (1-100)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Seleção de Fases -->
+    <div id="levels-modal" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-3xl p-6 max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-black text-white">SELEÇÃO DE FASES</h3>
+                <button id="btn-close-levels" class="text-gray-400 hover:text-white font-bold text-lg px-3 py-1">✕</button>
+            </div>
+            <div id="levels-grid" class="grid grid-cols-5 sm:grid-cols-6 gap-2 overflow-y-auto pr-1 flex-1 py-2">
+                <!-- Preenchido via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Game Over -->
+    <div id="gameover-screen" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 backdrop-blur-md">
+        <div class="text-center p-8 rounded-3xl bg-gray-900 border border-red-500/40 shadow-2xl max-w-sm mx-4">
+            <div class="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/50">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </div>
+            <h2 class="text-3xl font-black text-red-500 mb-1">VOCÊ BATEU!</h2>
+            <p class="text-gray-400 text-sm mb-6">Você atingiu a zona preta de perigo.</p>
+            
+            <div class="bg-gray-800/80 p-4 rounded-xl mb-6 border border-gray-700">
+                <div class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Pontuação Final</div>
+                <div id="final-score" class="text-4xl font-extrabold text-yellow-400">0</div>
+            </div>
+
+            <button id="btn-restart" class="w-full py-4 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white font-extrabold text-lg rounded-xl shadow-lg border-b-4 border-red-800 transition-all transform active:scale-95 pointer-events-auto">
+                TENTAR NOVAMENTE
+            </button>
+        </div>
+    </div>
+
+    <!-- Tela de Vitória -->
+    <div id="win-screen" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/75 backdrop-blur-md">
+        <div class="text-center p-8 rounded-3xl bg-gray-900 border border-emerald-500/40 shadow-2xl max-w-sm mx-4">
+            <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/50">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <h2 id="win-title" class="text-3xl font-black text-emerald-400 mb-1">NÍVEL CONCLUÍDO!</h2>
+            <p id="win-subtitle" class="text-gray-300 text-sm mb-6">Incrível! Você destruiu todas as plataformas.</p>
+
+            <button id="btn-next" class="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold text-lg rounded-xl shadow-lg border-b-4 border-emerald-800 transition-all transform active:scale-95 pointer-events-auto">
+                PRÓXIMO NÍVEL
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Configurações do Jogo e Constantes
+        const GAME_STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2, WIN: 3 };
+        let gameState = GAME_STATES.MENU;
+
+        const MAX_LEVELS = 100;
+        const PLATFORM_GAP = 1.2;
+        const INNER_RADIUS = 0.85;
+        const OUTER_RADIUS = 2.4;
+        const PLATFORM_HEIGHT = 0.35;
+        const JUMP_HEIGHT = 0.85; 
+        const BOUNCE_SPEED = 7.0;  // Quique mais ritmado e suave
+        const SMASH_SPEED = 14.0;  // Descida mais controlada e legível
+        const BALL_RADIUS = 0.32;
+
+        let level = parseInt(localStorage.getItem('stackball_currentlevel')) || 1;
+        let maxUnlockedLevel = parseInt(localStorage.getItem('stackball_maxunlocked')) || level;
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('stackball_highscore')) || 0;
+        let totalPlatforms = 0;
+        let destroyedCount = 0;
+
+        let isPressing = false;
+        let feverAmount = 0; 
+        let isFeverMode = false;
+        let feverDuration = 0;
+        let comboCount = 0;
+
+        // Áudio e Sintetizadores (Tone.js)
+        let audioInitialized = false;
+        let synthBounce, synthSmash, synthDanger, synthWin, synthFever;
+
+        function initAudio() {
+            if (audioInitialized) return;
+            try {
+                Tone.start();
+                audioInitialized = true;
+                
+                synthBounce = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 2, envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).toDestination();
+                synthBounce.volume.value = -6;
+
+                synthSmash = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.005, decay: 0.15, sustain: 0 } }).toDestination();
+                synthSmash.volume.value = -4;
+
+                synthDanger = new Tone.NoiseSynth({ noise: { type: 'brown' }, envelope: { attack: 0.005, decay: 0.3, sustain: 0 } }).toDestination();
+                synthDanger.volume.value = -2;
+
+                synthWin = new Tone.PolySynth(Tone.Synth).toDestination();
+                synthWin.volume.value = -6;
+
+                synthFever = new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0.1 } }).toDestination();
+                synthFever.volume.value = -4;
+            } catch (err) {
+                console.warn("Audio initialization error:", err);
+            }
+        }
+
+        function startGame() {
+            gameState = GAME_STATES.PLAYING;
+            document.getElementById('start-screen').classList.add('hidden');
+        }
+
+        function onGameOver() {
+            gameState = GAME_STATES.GAMEOVER;
+            isPressing = false;
+            playSound('danger');
+            shatterBall();
+
+            document.getElementById('final-score').innerText = score;
+            setTimeout(() => {
+                document.getElementById('gameover-screen').classList.remove('hidden');
+            }, 600);
+        }
+
+        function showComboText() {
+            if (comboCount <= 1) return;
+            const el = document.getElementById('combo-text');
+            el.innerText = `COMBO x${comboCount}!`;
+            el.classList.remove('opacity-0', 'scale-50');
+            el.classList.add('opacity-100', 'scale-110');
+            
+            clearTimeout(window.comboTimeout);
+            window.comboTimeout = setTimeout(() => {
+                el.classList.remove('opacity-100', 'scale-110');
+                el.classList.add('opacity-0', 'scale-50');
+            }, 600);
+        }
+
+        // Trilha expandida de Paletas para dar variedade às 100 fases
+        const COLOR_PALETTES = [
+            { safe: 0x00FF87, pole: 0xFFD166, bg: 0x111827, danger: 0x1E293B }, // Verde Cyan
+            { safe: 0xFF007F, pole: 0x7000FF, bg: 0x0F172A, danger: 0x18181B }, // Magenta Neon
+            { safe: 0xFF9F1C, pole: 0x2EC4B6, bg: 0x181028, danger: 0x121212 }, // Laranja Vibrante
+            { safe: 0x00F0FF, pole: 0xFF0055, bg: 0x0A192F, danger: 0x1A1A1A }, // Azul Elétrico
+            { safe: 0xFFE600, pole: 0xFF00B7, bg: 0x1A0933, danger: 0x111111 }, // Amarelo Sol
+            { safe: 0x00FFB3, pole: 0xFF3366, bg: 0x0D1F2D, danger: 0x171717 }, // Esmeralda Toxic
+            { safe: 0xFF5722, pole: 0x9C27B0, bg: 0x1B101C, danger: 0x0F0F0F }, // Vulcão Lava
+            { safe: 0x76FF03, pole: 0x00E5FF, bg: 0x0A1C16, danger: 0x1A1A1A }  // Cyberpunk Lime
+        ];
+
+        // Cálculo dinâmico de dificuldade para cada uma das 100 fases
+        function getLevelConfig(lvl) {
+            const isBoss = (lvl % 10 === 0);
+            
+            // Quantidade de andares aumentada (mais plataformas para destruir)
+            const platformsCount = Math.min(85, 30 + Math.floor(lvl * 0.52) + (isBoss ? 15 : 0));
+            
+            // Taxa de fatias pretas de perigo aumentada para recompensar precisão
+            const dangerRatio = Math.min(0.80, 0.48 + (lvl / 100) * 0.32 + (isBoss ? 0.08 : 0));
+            
+            // Fatias por andar: fatias mais finas e aberturas menores
+            const sliceCount = lvl > 40 ? 14 : (lvl > 15 ? 12 : 10);
+
+            // Rotação suave e confortável para os olhos
+            const rotSpeedBase = 0.55 + Math.min(0.55, (lvl / 100) * 0.45);
+
+            return {
+                isBoss: isBoss,
+                totalPlatforms: platformsCount,
+                dangerRatio: dangerRatio,
+                sliceCount: sliceCount,
+                rotSpeedBase: rotSpeedBase,
+                alternateRotation: true, // Rotação alternada em todas as fases
+                safeTopCount: 1 // Apenas 1 topo seguro
+            };
+        }
+
+        function playSound(type, pitchOffset = 0) {
+            if (!audioInitialized) return;
+            try {
+                const now = Tone.now();
+                if (type === 'bounce') {
+                    synthBounce.triggerAttackRelease("C3", "16n", now);
+                } else if (type === 'smash') {
+                    const notes = ["C4", "E4", "G4", "C5", "E5", "G5"];
+                    const note = notes[Math.min(pitchOffset, notes.length - 1)];
+                    synthSmash.triggerAttackRelease(note, "16n", now);
+                } else if (type === 'danger') {
+                    synthDanger.triggerAttackRelease("8n", now);
+                } else if (type === 'win') {
+                    synthWin.triggerAttackRelease(["C4", "E4", "G4", "C5"], "4n", now);
+                } else if (type === 'fever') {
+                    synthFever.triggerAttackRelease("C5", "8n", now);
+                }
+            } catch (err) {
+                // Silencioso em caso de erro de áudio
+            }
+        }
+
+        // Elementos principais do Three.js
+        let container, scene, camera, renderer;
+        let dirLight, ambientLight, pointLight;
+        let centralPole, finishPlatform, ball, ballGlow;
+        let platforms = [];
+        let activeDebris = [];
+        let splashMarks = [];
+
+        // Controle de Estado da Bola
+        let ballPos = { y: 0 };
+        let ballVelocityY = 0;
+        let bounceTimer = 0;
+        let currentTargetPlatformIndex = 0;
+
+        function initThree() {
+            container = document.getElementById('canvas-container');
+
+            // Cena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            scene.fog = new THREE.FogExp2(0x111827, 0.025);
+
+            // Câmera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 4, 8);
+            camera.lookAt(0, 0, 0);
+
+            // Renderizador
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            // Luzes
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(5, 15, 8);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 30;
+            dirLight.shadow.camera.left = -5;
+            dirLight.shadow.camera.right = 5;
+            dirLight.shadow.camera.top = 5;
+            dirLight.shadow.camera.bottom = -25;
+            scene.add(dirLight);
+
+            // Luz suave acompanhando a bola
+            pointLight = new THREE.PointLight(0xffaa00, 0, 6);
+            scene.add(pointLight);
+
+            // Redimensionamento de Tela
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // Função para criar fatias 3D das plataformas
+        function createSliceGeometry(innerR, outerR, height, startAngle, angleLength) {
+            const shape = new THREE.Shape();
+            const gap = 0.025; // Pequeno espaço entre fatias para melhor acabamento
+            const actualStart = startAngle + gap;
+            const actualEnd = startAngle + angleLength - gap;
+
+            shape.absarc(0, 0, outerR, actualStart, actualEnd, false);
+            shape.absarc(0, 0, innerR, actualEnd, actualStart, true);
+
+            const extrudeSettings = {
+                depth: height,
+                bevelEnabled: true,
+                bevelSegments: 2,
+                steps: 1,
+                bevelSize: 0.02,
+                bevelThickness: 0.02
+            };
+
+            const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            geom.rotateX(Math.PI / 2); // Orientar para horizontal (plano XZ)
+            return geom;
+        }
+
+        // Criar a Bola do Jogador
+        function createBall() {
+            if (ball) scene.remove(ball);
+
+            const group = new THREE.Group();
+
+            // Esfera Principal
+            const ballGeom = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
+            const ballMat = new THREE.MeshStandardMaterial({
+                color: 0xFF2E93,
+                roughness: 0.15,
+                metalness: 0.2,
+                clearcoat: 0.8,
+                clearcoatRoughness: 0.1
+            });
+            const ballMesh = new THREE.Mesh(ballGeom, ballMat);
+            ballMesh.castShadow = true;
+            group.add(ballMesh);
+
+            // Aura de Fogo (Invisível por padrão)
+            const glowGeom = new THREE.SphereGeometry(BALL_RADIUS * 1.25, 16, 16);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xFF4500,
+                transparent: true,
+                opacity: 0,
+                wireframe: true
+            });
+            ballGlow = new THREE.Mesh(glowGeom, glowMat);
+            group.add(ballGlow);
+
+            scene.add(group);
+            ball = group;
+        }
+
+        // Gerador de Nível
+        function buildLevel(lvl) {
+            // Limpar objetos antigos
+            platforms.forEach(p => scene.remove(p.group));
+            platforms = [];
+            activeDebris.forEach(d => scene.remove(d.mesh));
+            activeDebris = [];
+            splashMarks.forEach(s => scene.remove(s));
+            splashMarks = [];
+            if (centralPole) scene.remove(centralPole);
+            if (finishPlatform) scene.remove(finishPlatform);
+
+            const config = getLevelConfig(lvl);
+            const palette = COLOR_PALETTES[(lvl - 1) % COLOR_PALETTES.length];
+            scene.background.setHex(palette.bg);
+            scene.fog.color.setHex(palette.bg);
+
+            totalPlatforms = config.totalPlatforms;
+            destroyedCount = 0;
+
+            // Criar Pilar Central (Se for chefão fica dourado)
+            const poleHeight = (totalPlatforms + 4) * PLATFORM_GAP;
+            const poleGeom = new THREE.CylinderGeometry(INNER_RADIUS * 0.95, INNER_RADIUS * 0.95, poleHeight, 32);
+            const poleMat = new THREE.MeshStandardMaterial({
+                color: config.isBoss ? 0xFFD700 : palette.pole,
+                roughness: config.isBoss ? 0.1 : 0.3,
+                metalness: config.isBoss ? 0.8 : 0.4
+            });
+            centralPole = new THREE.Mesh(poleGeom, poleMat);
+            centralPole.position.y = -poleHeight / 2 + 2;
+            centralPole.receiveShadow = true;
+            scene.add(centralPole);
+
+            // Materiais das Plataformas
+            const safeMat = new THREE.MeshStandardMaterial({
+                color: palette.safe,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+
+            const dangerMat = new THREE.MeshStandardMaterial({
+                color: palette.danger,
+                roughness: 0.4,
+                metalness: 0.8
+            });
+
+            // Criar Plataformas Empilhadas
+            const sliceCount = config.sliceCount;
+            const anglePerSlice = (Math.PI * 2) / sliceCount;
+
+            for (let i = 0; i < totalPlatforms; i++) {
+                const platformGroup = new THREE.Group();
+                const posY = -i * PLATFORM_GAP;
+                platformGroup.position.y = posY;
+
+                // Definir rotação: alternar sentido em fases médias/altas
+                let direction = 1;
+                if (config.alternateRotation && i % 2 === 1) direction = -1;
+                const rotSpeed = (config.rotSpeedBase + (Math.random() * 0.25)) * direction;
+
+                const slices = [];
+                const isTopSafe = i < config.safeTopCount;
+
+                for (let s = 0; s < sliceCount; s++) {
+                    const isDanger = !isTopSafe && (Math.random() < config.dangerRatio);
+                    const geom = createSliceGeometry(INNER_RADIUS, OUTER_RADIUS, PLATFORM_HEIGHT, s * anglePerSlice, anglePerSlice);
+                    const mesh = new THREE.Mesh(geom, isDanger ? dangerMat : safeMat);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+
+                    platformGroup.add(mesh);
+
+                    slices.push({
+                        mesh: mesh,
+                        isDanger: isDanger,
+                        startAngle: s * anglePerSlice,
+                        angleLength: anglePerSlice
+                    });
+                }
+
+                scene.add(platformGroup);
+
+                platforms.push({
+                    group: platformGroup,
+                    slices: slices,
+                    posY: posY,
+                    rotSpeed: rotSpeed,
+                    destroyed: false
+                });
+            }
+
+            // Plataforma de Chegada no Fundo (Base Final)
+            const finishY = -totalPlatforms * PLATFORM_GAP;
+            const finishGeom = new THREE.CylinderGeometry(OUTER_RADIUS * 1.2, OUTER_RADIUS * 1.2, 0.6, 32);
+            const finishMat = new THREE.MeshStandardMaterial({
+                color: config.isBoss ? 0xFFD700 : 0x10B981,
+                roughness: 0.2,
+                metalness: 0.3
+            });
+            finishPlatform = new THREE.Mesh(finishGeom, finishMat);
+            finishPlatform.position.y = finishY;
+            finishPlatform.receiveShadow = true;
+            scene.add(finishPlatform);
+
+            // Posicionar a Bola no topo
+            ballPos.y = JUMP_HEIGHT + PLATFORM_HEIGHT;
+            ball.position.set(0, ballPos.y, INNER_RADIUS + (OUTER_RADIUS - INNER_RADIUS) / 2);
+            currentTargetPlatformIndex = 0;
+
+            updateUI();
+        }
+
+        // Criar Marcas de Tinta/Pingo na Plataforma ao Quicar
+        function createSplash(x, y, z, parentGroup) {
+            const splashGeom = new THREE.CircleGeometry(BALL_RADIUS * 0.9, 12);
+            const splashMat = new THREE.MeshBasicMaterial({
+                color: 0xFF2E93,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            });
+            const splash = new THREE.Mesh(splashGeom, splashMat);
+            splash.rotation.x = -Math.PI / 2;
+            splash.position.set(x, y + PLATFORM_HEIGHT + 0.01, z);
+            parentGroup.add(splash);
+            splashMarks.push(splash);
+        }
+
+        // Explodir Plataforma em Pedaços 3D
+        function explodePlatform(platformObj) {
+            const group = platformObj.group;
+
+            platformObj.slices.forEach(slice => {
+                const mesh = slice.mesh;
+                group.remove(mesh);
+                scene.add(mesh);
+
+                // Transferir posição e rotação para o mundo global
+                mesh.position.y = platformObj.posY;
+                mesh.rotation.y = group.rotation.y;
+
+                // Vetor de explosão para fora do centro
+                const midAngle = slice.startAngle + slice.angleLength / 2 + group.rotation.y;
+                const force = 8 + Math.random() * 6;
+                const vx = Math.cos(midAngle) * force;
+                const vz = Math.sin(midAngle) * force;
+                const vy = 4 + Math.random() * 6;
+
+                activeDebris.push({
+                    mesh: mesh,
+                    vx: vx,
+                    vy: vy,
+                    vz: vz,
+                    rotX: (Math.random() - 0.5) * 12,
+                    rotY: (Math.random() - 0.5) * 12,
+                    life: 1.2
+                });
+            });
+
+            scene.remove(group);
+        }
+
+        // Efeito de Estilhaçar a Bola ao Perder
+        function shatterBall() {
+            ball.visible = false;
+            const count = 20;
+            const geom = new THREE.SphereGeometry(BALL_RADIUS * 0.3, 8, 8);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xFF2E93, roughness: 0.2 });
+
+            for (let i = 0; i < count; i++) {
+                const p = new THREE.Mesh(geom, mat);
+                p.position.copy(ball.position);
+                scene.add(p);
+
+                const force = 6 + Math.random() * 8;
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.random() * Math.PI;
+
+                activeDebris.push({
+                    mesh: p,
+                    vx: Math.sin(phi) * Math.cos(theta) * force,
+                    vy: Math.cos(phi) * force + 3,
+                    vz: Math.sin(phi) * Math.sin(theta) * force,
+                    rotX: Math.random() * 10,
+                    rotY: Math.random() * 10,
+                    life: 1.5
+                });
+            }
+        }
+
+        // Atualização dos Estilhaços em Movimento
+        function updateDebris(dt) {
+            for (let i = activeDebris.length - 1; i >= 0; i--) {
+                const d = activeDebris[i];
+                d.life -= dt;
+
+                d.mesh.position.x += d.vx * dt;
+                d.mesh.position.y += d.vy * dt;
+                d.mesh.position.z += d.vz * dt;
+
+                d.vy -= 28 * dt; // Gravidade
+
+                d.mesh.rotation.x += d.rotX * dt;
+                d.mesh.rotation.y += d.rotY * dt;
+
+                d.mesh.scale.multiplyScalar(Math.max(0, 1 - dt * 1.5));
+
+                if (d.life <= 0 || d.mesh.scale.x < 0.05) {
+                    scene.remove(d.mesh);
+                    activeDebris.splice(i, 1);
+                }
+            }
+        }
+
+        // Lógica de Destruição e Colisão
+        function checkSmashCollision() {
+            if (currentTargetPlatformIndex >= platforms.length) {
+                // Chegou na base final!
+                if (ball.position.y <= finishPlatform.position.y + 0.3) {
+                    onWinLevel();
+                }
+                return;
+            }
+
+            const target = platforms[currentTargetPlatformIndex];
+            const targetSurfaceY = target.posY + PLATFORM_HEIGHT;
+
+            // Se a bola desceu até o topo da plataforma
+            if (ball.position.y - BALL_RADIUS <= targetSurfaceY) {
+
+                if (isPressing) {
+                    // Ângulo atual da bola em relação à plataforma giratória (corrigido para coincidir perfeitamente com o visual 3D)
+                    const ballAngle = Math.atan2(ball.position.z, ball.position.x);
+                    let localAngle = (ballAngle + target.group.rotation.y) % (Math.PI * 2);
+                    while (localAngle < 0) localAngle += Math.PI * 2;
+                    while (localAngle >= Math.PI * 2) localAngle -= Math.PI * 2;
+
+                    // Encontrar a fatia exata atingida sob a bola
+                    let hitSlice = target.slices.find(s => localAngle >= s.startAngle && localAngle < s.startAngle + s.angleLength);
+                    
+                    // Tratamento de borda: encontra a fatia mais próxima caso o ângulo caia na divisa
+                    if (!hitSlice) {
+                        let minDist = Infinity;
+                        target.slices.forEach(s => {
+                            const mid = s.startAngle + s.angleLength / 2;
+                            let diff = Math.abs(localAngle - mid);
+                            if (diff > Math.PI) diff = Math.PI * 2 - diff;
+                            if (diff < minDist) {
+                                minDist = diff;
+                                hitSlice = s;
+                            }
+                        });
+                    }
+
+                    // Colisão com zona preta perigosa (sem estar no modo fogo)
+                    if (hitSlice && hitSlice.isDanger && !isFeverMode) {
+                        onGameOver();
+                        return;
+                    }
+
+                    // Destruir plataforma!
+                    target.destroyed = true;
+                    explodePlatform(target);
+
+                    destroyedCount++;
+                    comboCount++;
+                    score += isFeverMode ? 3 : 1;
+
+                    // Aumentar Barra de Fever (mais desafiador para ativar)
+                    if (!isFeverMode) {
+                        feverAmount = Math.min(100, feverAmount + 2.8);
+                        if (feverAmount >= 100) {
+                            activateFeverMode();
+                        }
+                    }
+
+                    playSound('smash', comboCount);
+                    showComboText();
+
+                    currentTargetPlatformIndex++;
+
+                    // Ajustar posição suavemente para continuar descendo rápido
+                    ball.position.y = targetSurfaceY - 0.05;
+
+                } else {
+                    // MODO QUICAR (Sem segurar)
+                    ball.position.y = targetSurfaceY + BALL_RADIUS;
+                    bounceTimer = 0;
+                    comboCount = 0;
+
+                    // Criar pingo de tinta exatamente abaixo da bola
+                    const rotY = target.group.rotation.y;
+                    const localX = -ball.position.z * Math.sin(rotY);
+                    const localZ = ball.position.z * Math.cos(rotY);
+                    createSplash(localX, 0, localZ, target.group);
+
+                    playSound('bounce');
+                }
+            }
+        }
+
+        function activateFeverMode() {
+            isFeverMode = true;
+            feverDuration = 4.0; // 4 segundos de invencibilidade
+            playSound('fever');
+        }
+
+        // Controles de Entrada (Teclado, Mouse e Touch Screen)
+        function setupInputs() {
+            const onDown = (e) => {
+                if (e.target.closest('button') || e.target.closest('#levels-modal')) return;
+                initAudio();
+                if (gameState === GAME_STATES.MENU) {
+                    startGame();
+                }
+                if (gameState === GAME_STATES.PLAYING) {
+                    isPressing = true;
+                }
+            };
+
+            const onUp = () => {
+                isPressing = false;
+            };
+
+            window.addEventListener('mousedown', onDown);
+            window.addEventListener('mouseup', onUp);
+            window.addEventListener('touchstart', onDown, { passive: true });
+            window.addEventListener('touchend', onUp, { passive: true });
+
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    onDown(e);
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') {
+                    onUp();
+                }
+            });
+
+            // Botões das Telas de UI
+            document.getElementById('btn-restart').addEventListener('click', () => {
+                resetLevel();
+            });
+
+            document.getElementById('btn-next').addEventListener('click', () => {
+                if (level < MAX_LEVELS) {
+                    level++;
+                }
+                resetLevel();
+            });
+
+            // Modal de Fases
+            const modal = document.getElementById('levels-modal');
+            document.getElementById('btn-open-levels').addEventListener('click', (e) => {
+                e.stopPropagation();
+                renderLevelsGrid();
+                modal.classList.remove('hidden');
+            });
+
+            document.getElementById('btn-close-levels').addEventListener('click', (e) => {
+                e.stopPropagation();
+                modal.classList.add('hidden');
+            });
+        }
+
+        function renderLevelsGrid() {
+            const container = document.getElementById('levels-grid');
+            container.innerHTML = '';
+
+            for (let i = 1; i <= MAX_LEVELS; i++) {
+                const btn = document.createElement('button');
+                const isUnlocked = i <= maxUnlockedLevel;
+                const isCurrent = i === level;
+                const isBoss = (i % 10 === 0);
+
+                let btnStyle = "h-11 rounded-xl text-xs font-black flex items-center justify-center transition-all border ";
+
+                if (isCurrent) {
+                    btnStyle += "bg-yellow-500 text-gray-900 border-yellow-300 ring-2 ring-yellow-400 ";
+                } else if (isUnlocked) {
+                    btnStyle += isBoss 
+                        ? "bg-gradient-to-r from-red-600 to-amber-600 text-white border-yellow-400 hover:scale-105 " 
+                        : "bg-gray-800 text-emerald-400 border-gray-700 hover:bg-gray-700 hover:text-emerald-300 ";
+                } else {
+                    btnStyle += "bg-gray-900/60 text-gray-600 border-gray-800/80 cursor-not-allowed ";
+                }
+
+                btn.className = btnStyle;
+                btn.innerText = isBoss ? `👑${i}` : i;
+
+                if (isUnlocked) {
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        level = i;
+                        document.getElementById('levels-modal').classList.add('hidden');
+                        resetLevel();
+                    };
+                }
+
+                container.appendChild(btn);
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('score-text').innerText = score;
+            document.getElementById('high-score-text').innerText = highScore;
+            document.getElementById('level-current').innerText = level;
+            document.getElementById('level-next').innerText = Math.min(MAX_LEVELS, level + 1);
+
+            document.getElementById('level-title-text').innerText = `FASE ${level} DE ${MAX_LEVELS}`;
+
+            const config = getLevelConfig(level);
+            const bossBadge = document.getElementById('boss-badge');
+            if (config.isBoss) {
+                bossBadge.classList.remove('hidden');
+            } else {
+                bossBadge.classList.add('hidden');
+            }
+
+            const progressRatio = totalPlatforms > 0 ? (destroyedCount / totalPlatforms) : 0;
+            const percent = Math.min(100, Math.round(progressRatio * 100));
+            document.getElementById('level-progress-bar').style.width = `${percent}%`;
+            document.getElementById('level-percent-text').innerText = `${percent}%`;
+
+            // Atualizar Barra de Fever
+            const feverBar = document.getElementById('fever-bar');
+            const feverPercentText = document.getElementById('fever-percent');
+            const feverLabel = document.getElementById('fever-label');
+
+            feverBar.style.width = `${feverAmount}%`;
+            feverPercentText.innerText = `${Math.round(feverAmount)}%`;
+
+            if (isFeverMode) {
+                feverLabel.innerText = "MODO FOGO ATIVO!";
+                feverLabel.className = "text-xs font-black text-red-400 tracking-wider animate-pulse";
+            } else {
+                feverLabel.innerText = "PODER DE FOGO";
+                feverLabel.className = "text-xs font-bold text-orange-400 tracking-wider";
+            }
+        }
+
+        function onWinLevel() {
+            gameState = GAME_STATES.WIN;
+            isPressing = false;
+            playSound('win');
+
+            // Salvar maior nível desbloqueado e progresso
+            if (level + 1 > maxUnlockedLevel && level < MAX_LEVELS) {
+                maxUnlockedLevel = level + 1;
+                localStorage.setItem('stackball_maxunlocked', maxUnlockedLevel);
+            }
+            localStorage.setItem('stackball_currentlevel', Math.min(MAX_LEVELS, level + 1));
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('stackball_highscore', highScore);
+            }
+
+            const winTitle = document.getElementById('win-title');
+            const winSubtitle = document.getElementById('win-subtitle');
+            const btnNext = document.getElementById('btn-next');
+
+            if (level >= MAX_LEVELS) {
+                winTitle.innerText = "🏆 JOGO CONCLUÍDO!";
+                winSubtitle.innerText = "Incrível! Você venceu todas as 100 fases do Stack Ball!";
+                btnNext.innerText = "JOGAR NOVAMENTE";
+            } else {
+                winTitle.innerText = `FASE ${level} CONCLUÍDA!`;
+                winSubtitle.innerText = "Excelente! Prepare-se para o próximo desafio.";
+                btnNext.innerText = "PRÓXIMO NÍVEL";
+            }
+
+            setTimeout(() => {
+                document.getElementById('win-screen').classList.remove('hidden');
+            }, 500);
+        }
+
+        function resetLevel() {
+            localStorage.setItem('stackball_currentlevel', level);
+
+            document.getElementById('gameover-screen').classList.add('hidden');
+            document.getElementById('win-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+
+            if (gameState === GAME_STATES.GAMEOVER) {
+                score = 0;
+            }
+
+            feverAmount = 0;
+            isFeverMode = false;
+            comboCount = 0;
+            isPressing = false;
+
+            createBall();
+            buildLevel(level);
+            gameState = GAME_STATES.MENU;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Loop Principal do Jogo
+        let lastTime = performance.now();
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min((now - lastTime) / 1000, 0.1); // Delta time limitado
+            lastTime = now;
+
+            // Rotação das plataformas ativas (suave e sem trepidações bruscas)
+            platforms.forEach((p, idx) => {
+                if (!p.destroyed) {
+                    const speedMultiplier = 1 + Math.sin(now * 0.0015 + idx * 0.5) * 0.15;
+                    p.group.rotation.y += p.rotSpeed * speedMultiplier * dt;
+                }
+            });
+
+            // Gerenciamento do Modo Fever (Super Poder)
+            if (isFeverMode) {
+                feverDuration -= dt;
+                feverAmount = (feverDuration / 4.0) * 100;
+
+                // Efeito visual na bola
+                ballGlow.material.opacity = 0.8 + Math.sin(now * 0.02) * 0.2;
+                ballGlow.rotation.y += dt * 5;
+                pointLight.color.setHex(0xFF4500);
+                pointLight.intensity = 3;
+
+                if (feverDuration <= 0) {
+                    isFeverMode = false;
+                    feverAmount = 0;
+                    ballGlow.material.opacity = 0;
+                    pointLight.intensity = 0;
+                }
+            } else {
+                // Diminuir barra de fogo aos poucos quando parado
+                if (!isPressing && feverAmount > 0) {
+                    feverAmount = Math.max(0, feverAmount - dt * 15);
+                }
+            }
+
+            // Lógica do Movimento da Bola
+            if (gameState === GAME_STATES.PLAYING || gameState === GAME_STATES.MENU) {
+                if (isPressing && gameState === GAME_STATES.PLAYING) {
+                    // Descer com alta velocidade ao segurar
+                    ball.position.y -= SMASH_SPEED * dt;
+                    checkSmashCollision();
+                } else {
+                    // Quicar suavemente quando livre
+                    bounceTimer += dt * BOUNCE_SPEED;
+                    const targetY = (currentTargetPlatformIndex < platforms.length) 
+                        ? platforms[currentTargetPlatformIndex].posY + PLATFORM_HEIGHT + BALL_RADIUS 
+                        : finishPlatform.position.y + 0.3 + BALL_RADIUS;
+
+                    ball.position.y = targetY + Math.abs(Math.sin(bounceTimer)) * JUMP_HEIGHT;
+
+                    // Efeito de deformação leve (squash/stretch)
+                    const bounceSin = Math.sin(bounceTimer);
+                    if (Math.abs(bounceSin) < 0.2) {
+                        ball.scale.set(1.2, 0.8, 1.2); // Amassar no impacto
+                    } else {
+                        ball.scale.set(0.95, 1.08, 0.95); // Esticar no ar
+                    }
+                }
+
+                // Ajustar posição da luz junto com a bola
+                pointLight.position.copy(ball.position);
+            }
+
+            // Atualizar estilhaços físicos da destruição
+            updateDebris(dt);
+
+            // Câmera segue a bola de forma uniforme e confortável
+            const targetCamY = ball.position.y + 2.5;
+            camera.position.y += (targetCamY - camera.position.y) * 0.08;
+            camera.lookAt(0, ball.position.y - 1.2, 0);
+
+            // Atualizar UI
+             updateUI();
+
+            // Renderizar Cena 3D
+            renderer.render(scene, camera);
+        }
+
+        // Inicialização Completa
+        window.onload = () => {
+            initThree();
+            createBall();
+            buildLevel(level);
+            setupInputs();
+
+            // Iniciar Game Loop
+            requestAnimationFrame((time) => {
+                lastTime = time;
+                animate(time);
+            });
+        };
+    </script>
+</body>
+</html>
