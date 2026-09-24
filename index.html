@@ -172,8 +172,8 @@
         const OUTER_RADIUS = 2.4;
         const PLATFORM_HEIGHT = 0.35;
         const JUMP_HEIGHT = 0.85; 
-        const BOUNCE_SPEED = 7.0;  // Quique mais ritmado e suave
-        const SMASH_SPEED = 14.0;  // Descida mais controlada e legível
+        const BOUNCE_SPEED = 6.2;  // Meio termo ideal para quique ágil e fluido
+        const SMASH_SPEED = 10.5;  // Descida rápida e satisfatória mantendo boa reação
         const BALL_RADIUS = 0.32;
 
         let level = parseInt(localStorage.getItem('stackball_currentlevel')) || 1;
@@ -261,21 +261,21 @@
             { safe: 0x76FF03, pole: 0x00E5FF, bg: 0x0A1C16, danger: 0x1A1A1A }  // Cyberpunk Lime
         ];
 
-        // Cálculo dinâmico de dificuldade para cada uma das 100 fases
+        // Cálculo dinâmico de dificuldade progressiva para cada uma das 100 fases
         function getLevelConfig(lvl) {
             const isBoss = (lvl % 10 === 0);
             
-            // Quantidade de andares aumentada (mais plataformas para destruir)
-            const platformsCount = Math.min(85, 30 + Math.floor(lvl * 0.52) + (isBoss ? 15 : 0));
+            // Quantidade de plataformas por torre (escala de 20 até 90 andares)
+            const platformsCount = Math.min(90, 20 + Math.floor(lvl * 0.7) + (isBoss ? 15 : 0));
             
-            // Taxa de fatias pretas de perigo aumentada para recompensar precisão
-            const dangerRatio = Math.min(0.80, 0.48 + (lvl / 100) * 0.32 + (isBoss ? 0.08 : 0));
+            // Proporção de zonas pretas perigosas: escala de 20% no nível 1 até 66% nas fases finais
+            const dangerRatio = Math.min(0.66, 0.20 + (lvl / 100) * 0.42 + (isBoss ? 0.08 : 0));
             
-            // Fatias por andar: fatias mais finas e aberturas menores
-            const sliceCount = lvl > 40 ? 14 : (lvl > 15 ? 12 : 10);
+            // Fatias mais finas e mais numerosas em fases avançadas (8 -> 10 -> 12 -> 14 -> 16 fatias)
+            const sliceCount = lvl > 75 ? 16 : (lvl > 50 ? 14 : (lvl > 25 ? 12 : (lvl > 10 ? 10 : 8)));
 
-            // Rotação suave e confortável para os olhos
-            const rotSpeedBase = 0.55 + Math.min(0.55, (lvl / 100) * 0.45);
+            // Rotação acelerada progressivamente (0.4 no lvl 1 até 1.25 rad/s no lvl 100)
+            const rotSpeedBase = 0.40 + Math.min(0.85, (lvl / 100) * 0.85) + (isBoss ? 0.2 : 0);
 
             return {
                 isBoss: isBoss,
@@ -283,8 +283,10 @@
                 dangerRatio: dangerRatio,
                 sliceCount: sliceCount,
                 rotSpeedBase: rotSpeedBase,
-                alternateRotation: true, // Rotação alternada em todas as fases
-                safeTopCount: 1 // Apenas 1 topo seguro
+                alternateRotation: true,
+                safeTopCount: lvl > 30 ? 0 : (lvl > 10 ? 1 : 2), // Topo seguro reduz até 0 em fases avançadas
+                oscillate: lvl >= 15, // Nível 15+: plataformas variam a velocidade enquanto giram
+                switchDir: lvl >= 35   // Nível 35+: plataformas invertem o sentido repentinamente
             };
         }
 
@@ -517,7 +519,9 @@
                     slices: slices,
                     posY: posY,
                     rotSpeed: rotSpeed,
-                    destroyed: false
+                    destroyed: false,
+                    oscillate: config.oscillate && (i % 2 === 0),
+                    switchDir: config.switchDir && (i % 3 === 0)
                 });
             }
 
@@ -698,9 +702,10 @@
                     comboCount++;
                     score += isFeverMode ? 3 : 1;
 
-                    // Aumentar Barra de Fever (mais desafiador para ativar)
+                    // Aumentar Barra de Fever (preenche mais devagar em níveis mais altos)
                     if (!isFeverMode) {
-                        feverAmount = Math.min(100, feverAmount + 2.8);
+                        const feverGain = Math.max(1.2, 4.2 - (level * 0.028));
+                        feverAmount = Math.min(100, feverAmount + feverGain);
                         if (feverAmount >= 100) {
                             activateFeverMode();
                         }
@@ -842,9 +847,10 @@
             document.getElementById('level-current').innerText = level;
             document.getElementById('level-next').innerText = Math.min(MAX_LEVELS, level + 1);
 
-            document.getElementById('level-title-text').innerText = `FASE ${level} DE ${MAX_LEVELS}`;
-
             const config = getLevelConfig(level);
+            const dangerPct = Math.round(config.dangerRatio * 100);
+            document.getElementById('level-title-text').innerText = `FASE ${level} DE ${MAX_LEVELS} • PERIGO ${dangerPct}%`;
+
             const bossBadge = document.getElementById('boss-badge');
             if (config.isBoss) {
                 bossBadge.classList.remove('hidden');
@@ -946,11 +952,25 @@
             const dt = Math.min((now - lastTime) / 1000, 0.1); // Delta time limitado
             lastTime = now;
 
-            // Rotação das plataformas ativas (suave e sem trepidações bruscas)
+            // Rotação das plataformas ativas com mecânicas dinâmicas de dificuldade
             platforms.forEach((p, idx) => {
                 if (!p.destroyed) {
-                    const speedMultiplier = 1 + Math.sin(now * 0.0015 + idx * 0.5) * 0.15;
-                    p.group.rotation.y += p.rotSpeed * speedMultiplier * dt;
+                    let currentSpeed = p.rotSpeed;
+
+                    // Oscilação de velocidade estilo onda para fases intermediárias/avançadas
+                    if (p.oscillate) {
+                        currentSpeed *= (1 + Math.sin(now * 0.002 + idx * 0.7) * 0.65);
+                    }
+
+                    // Mudança repentina de sentido para fases de alta dificuldade
+                    if (p.switchDir) {
+                        const switchFactor = Math.sin(now * 0.0012 + idx * 1.5);
+                        if (switchFactor > 0.8) {
+                            currentSpeed *= -1.2;
+                        }
+                    }
+
+                    p.group.rotation.y += currentSpeed * dt;
                 }
             });
 
@@ -972,9 +992,10 @@
                     pointLight.intensity = 0;
                 }
             } else {
-                // Diminuir barra de fogo aos poucos quando parado
+                // Diminuir barra de fogo aos poucos quando parado (decai mais rápido em níveis altos)
                 if (!isPressing && feverAmount > 0) {
-                    feverAmount = Math.max(0, feverAmount - dt * 15);
+                    const decayRate = 12 + (level * 0.18);
+                    feverAmount = Math.max(0, feverAmount - dt * decayRate);
                 }
             }
 
@@ -1009,19 +1030,18 @@
             // Atualizar estilhaços físicos da destruição
             updateDebris(dt);
 
-            // Câmera segue a bola de forma uniforme e confortável
+            // Câmera responde mais rápido para acompanhar a nova velocidade
             const targetCamY = ball.position.y + 2.5;
-            camera.position.y += (targetCamY - camera.position.y) * 0.08;
+            camera.position.y += (targetCamY - camera.position.y) * 0.12;
             camera.lookAt(0, ball.position.y - 1.2, 0);
 
             // Atualizar UI
-             updateUI();
+            updateUI();
 
             // Renderizar Cena 3D
             renderer.render(scene, camera);
         }
-
-        // Inicialização Completa
+         // Inicialização Completa
         window.onload = () => {
             initThree();
             createBall();
