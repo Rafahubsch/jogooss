@@ -71,11 +71,11 @@
             <!-- Barra de FEVER / MODO FOGO -->
             <div id="fever-container" class="w-full max-w-xs bg-gray-800/80 backdrop-blur-md p-1.5 rounded-full border border-orange-500/30 opacity-90 transition-all duration-300">
                 <div class="flex justify-between items-center px-2 mb-1">
-                    <span id="fever-label" class="text-xs font-bold text-orange-400 tracking-wider">PODER DE FOGO</span>
-                    <span id="fever-percent" class="text-xs font-bold text-orange-300">0%</span>
+                    <span id="fever-label" class="text-xs font-black text-orange-400 tracking-wider flex items-center gap-1">🔥 PODER DE FOGO</span>
+                    <span id="fever-percent" class="text-xs font-extrabold text-orange-300">0%</span>
                 </div>
-                <div class="w-full bg-gray-900 h-2.5 rounded-full overflow-hidden p-0.5">
-                    <div id="fever-bar" class="fever-bar-fill bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 h-full rounded-full w-0"></div>
+                <div class="w-full bg-gray-900 h-3 rounded-full overflow-hidden p-0.5 border border-orange-500/40">
+                    <div id="fever-bar" class="fever-bar-fill bg-gradient-to-r from-amber-400 via-orange-500 to-red-600 h-full rounded-full w-0 shadow-[0_0_10px_rgba(249,115,22,0.8)]"></div>
                 </div>
             </div>
         </div>
@@ -316,6 +316,7 @@
         let container, scene, camera, renderer;
         let dirLight, ambientLight, pointLight;
         let centralPole, finishPlatform, ball, ballGlow;
+        let bgParticles, bgGradientDome; // Elementos para o fundo mais bonito e imersivo
         let platforms = [];
         let activeDebris = [];
         let splashMarks = [];
@@ -332,7 +333,7 @@
             // Cena
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111827);
-            scene.fog = new THREE.FogExp2(0x111827, 0.025);
+            scene.fog = new THREE.FogExp2(0x111827, 0.018);
 
             // Câmera
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -346,11 +347,11 @@
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.1;
+            renderer.toneMappingExposure = 1.15;
             container.appendChild(renderer.domElement);
 
             // Luzes
-            ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
             scene.add(ambientLight);
 
             dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -370,8 +371,73 @@
             pointLight = new THREE.PointLight(0xffaa00, 0, 6);
             scene.add(pointLight);
 
+            // --- CRIAR SISTEMA DE FUNDO VIBRANTE E ELEGANTE ---
+            createBackgroundEffects();
+
             // Redimensionamento de Tela
             window.addEventListener('resize', onWindowResize);
+        }
+
+        // Criar Partículas Flutuantes e Domo com Gradiente para o Fundo
+        function createBackgroundEffects() {
+            // 1. Domo de Gradiente Suave ao Fundo
+            const domeGeom = new THREE.SphereGeometry(45, 32, 16);
+            const domeMat = new THREE.MeshBasicMaterial({
+                color: 0x1a2035,
+                side: THREE.BackSide,
+                transparent: true,
+                opacity: 0.95
+            });
+            bgGradientDome = new THREE.Mesh(domeGeom, domeMat);
+            scene.add(bgGradientDome);
+
+            // 2. Partículas Mágicas e Brilhantes no Ar (Poeira Estelar)
+            const particleCount = 200;
+            const particleGeom = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const scales = new Float32Array(particleCount);
+
+            for (let i = 0; i < particleCount; i++) {
+                // Espalhar em um raio ao redor do pilar central e ao longo da altura da torre
+                const radius = 6 + Math.random() * 18;
+                const theta = Math.random() * Math.PI * 2;
+                positions[i * 3] = Math.cos(theta) * radius;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 120; // Extensão vertical
+                positions[i * 3 + 2] = Math.sin(theta) * radius;
+
+                scales[i] = 0.08 + Math.random() * 0.18;
+            }
+
+            particleGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            // Textura circular brilhante gerada via Canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(16, 16, 16, 0, Math.PI * 2);
+            ctx.fill();
+
+            const pTexture = new THREE.CanvasTexture(canvas);
+
+            const particleMat = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.45,
+                map: pTexture,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            bgParticles = new THREE.Points(particleGeom, particleMat);
+            scene.add(bgParticles);
         }
 
         // Função para criar fatias 3D das plataformas
@@ -448,6 +514,18 @@
             const palette = COLOR_PALETTES[(lvl - 1) % COLOR_PALETTES.length];
             scene.background.setHex(palette.bg);
             scene.fog.color.setHex(palette.bg);
+
+            // Ajustar tom do domo e brilho das partículas do fundo combinando com a fase
+            if (bgGradientDome) {
+                const bgThreeColor = new THREE.Color(palette.bg);
+                // Eleva suavemente a luminosidade do centro do fundo
+                bgGradientDome.material.color.copy(bgThreeColor).addScalar(0.06);
+            }
+
+            if (bgParticles) {
+                // Dá um toque sutil da cor segura das plataformas nas partículas de poeira
+                bgParticles.material.color.setHex(palette.safe).lerp(new THREE.Color(0xffffff), 0.6);
+            }
 
             totalPlatforms = config.totalPlatforms;
             destroyedCount = 0;
@@ -575,25 +653,66 @@
                 mesh.position.y = platformObj.posY;
                 mesh.rotation.y = group.rotation.y;
 
-                // Vetor de explosão para fora do centro
+                // Vetor de explosão para fora do centro (mais forte se estiver no Modo Fogo)
                 const midAngle = slice.startAngle + slice.angleLength / 2 + group.rotation.y;
-                const force = 8 + Math.random() * 6;
+                const forceMultiplier = isFeverMode ? 1.8 : 1.0;
+                const force = (8 + Math.random() * 6) * forceMultiplier;
                 const vx = Math.cos(midAngle) * force;
                 const vz = Math.sin(midAngle) * force;
-                const vy = 4 + Math.random() * 6;
+                const vy = (4 + Math.random() * 6) * forceMultiplier;
+
+                // Se estiver no Modo Fogo, mudar temporariamente a cor dos estilhaços para chamas
+                if (isFeverMode) {
+                    mesh.material = new THREE.MeshStandardMaterial({
+                        color: Math.random() > 0.5 ? 0xFF4500 : 0xFFD700,
+                        emissive: 0xFF2200,
+                        emissiveIntensity: 0.6,
+                        roughness: 0.1
+                    });
+                }
 
                 activeDebris.push({
                     mesh: mesh,
                     vx: vx,
                     vy: vy,
                     vz: vz,
-                    rotX: (Math.random() - 0.5) * 12,
-                    rotY: (Math.random() - 0.5) * 12,
+                    rotX: (Math.random() - 0.5) * 14,
+                    rotY: (Math.random() - 0.5) * 14,
                     life: 1.2
                 });
             });
 
+            // Criar partículas extras de faíscas no modo Fogo
+            if (isFeverMode) {
+                createFireSparks(ball.position.x, platformObj.posY, ball.position.z);
+            }
+
             scene.remove(group);
+        }
+
+        // Criar Faíscas de Fogo
+        function createFireSparks(x, y, z) {
+            const sparkCount = 12;
+            const geom = new THREE.SphereGeometry(0.08 + Math.random() * 0.06, 6, 6);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xFFCC00 });
+
+            for (let i = 0; i < sparkCount; i++) {
+                const p = new THREE.Mesh(geom, mat);
+                p.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
+                scene.add(p);
+
+                const angle = Math.random() * Math.PI * 2;
+                const spd = 3 + Math.random() * 5;
+                activeDebris.push({
+                    mesh: p,
+                    vx: Math.cos(angle) * spd,
+                    vy: 2 + Math.random() * 4,
+                    vz: Math.sin(angle) * spd,
+                    rotX: 0,
+                    rotY: 0,
+                    life: 0.5
+                });
+            }
         }
 
         // Efeito de Estilhaçar a Bola ao Perder
@@ -702,9 +821,9 @@
                     comboCount++;
                     score += isFeverMode ? 3 : 1;
 
-                    // Aumentar Barra de Fever (preenche mais devagar em níveis mais altos)
+                    // Aumentar Barra de Fever (Aumentado para ativar entre 8 a 10 destruições seguidas!)
                     if (!isFeverMode) {
-                        const feverGain = Math.max(1.2, 4.2 - (level * 0.028));
+                        const feverGain = Math.max(10, 13.5 - (level * 0.05));
                         feverAmount = Math.min(100, feverAmount + feverGain);
                         if (feverAmount >= 100) {
                             activateFeverMode();
@@ -714,32 +833,27 @@
                     playSound('smash', comboCount);
                     showComboText();
 
+                    // Avançar para a próxima plataforma
                     currentTargetPlatformIndex++;
-
-                    // Ajustar posição suavemente para continuar descendo rápido
-                    ball.position.y = targetSurfaceY - 0.05;
-
-                } else {
-                    // MODO QUICAR (Sem segurar)
-                    ball.position.y = targetSurfaceY + BALL_RADIUS;
                     bounceTimer = 0;
-                    comboCount = 0;
-
-                    // Criar pingo de tinta exatamente abaixo da bola
-                    const rotY = target.group.rotation.y;
-                    const localX = -ball.position.z * Math.sin(rotY);
-                    const localZ = ball.position.z * Math.cos(rotY);
-                    createSplash(localX, 0, localZ, target.group);
-
-                    playSound('bounce');
                 }
             }
         }
 
         function activateFeverMode() {
             isFeverMode = true;
-            feverDuration = 4.0; // 4 segundos de invencibilidade
+            feverDuration = 4.5; // 4.5 segundos de invencibilidade com super velocidade
             playSound('fever');
+
+            // Feedback na tela do combo
+            const el = document.getElementById('combo-text');
+            el.innerText = "🔥 MODO FOGO ATIVADO! 🔥";
+            el.classList.remove('opacity-0', 'scale-50');
+            el.classList.add('opacity-100', 'scale-125');
+            setTimeout(() => {
+                el.classList.remove('opacity-100', 'scale-125');
+                el.classList.add('opacity-0', 'scale-50');
+            }, 1200);
         }
 
         // Controles de Entrada (Teclado, Mouse e Touch Screen)
@@ -952,6 +1066,26 @@
             const dt = Math.min((now - lastTime) / 1000, 0.1); // Delta time limitado
             lastTime = now;
 
+            // Rotação suave do fundo e partículas flutuantes para profundidade
+            if (bgParticles) {
+                bgParticles.rotation.y += 0.03 * dt;
+                
+                // Mover sutilmente as partículas para cima criando um efeito dinâmico constante
+                const positions = bgParticles.geometry.attributes.position.array;
+                for (let i = 1; i < positions.length; i += 3) {
+                    positions[i] += 0.8 * dt;
+                    if (positions[i] > camera.position.y + 30) {
+                        positions[i] = camera.position.y - 40;
+                    }
+                }
+                bgParticles.geometry.attributes.position.needsUpdate = true;
+            }
+
+            if (bgGradientDome) {
+                // Acompanhar a altura da câmera para manter o efeito de profundidade
+                bgGradientDome.position.y = camera.position.y;
+            }
+
             // Rotação das plataformas ativas com mecânicas dinâmicas de dificuldade
             platforms.forEach((p, idx) => {
                 if (!p.destroyed) {
@@ -977,24 +1111,47 @@
             // Gerenciamento do Modo Fever (Super Poder)
             if (isFeverMode) {
                 feverDuration -= dt;
-                feverAmount = (feverDuration / 4.0) * 100;
+                feverAmount = (feverDuration / 4.5) * 100;
 
-                // Efeito visual na bola
-                ballGlow.material.opacity = 0.8 + Math.sin(now * 0.02) * 0.2;
-                ballGlow.rotation.y += dt * 5;
-                pointLight.color.setHex(0xFF4500);
-                pointLight.intensity = 3;
+                // Efeito visual pulsante e brilhante na bola
+                ballGlow.material.opacity = 0.85 + Math.sin(now * 0.03) * 0.15;
+                ballGlow.scale.setScalar(1.2 + Math.sin(now * 0.02) * 0.1);
+                ballGlow.rotation.y += dt * 8;
+                pointLight.color.setHex(0xFF3300);
+                pointLight.intensity = 4.5;
+
+                // Criar pequeno rastro de chamas caindo da bola enquanto desce
+                if (isPressing && Math.random() < 0.6) {
+                    const spark = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.1 + Math.random() * 0.08, 6, 6),
+                        new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0xFF4500 : 0xFFCC00 })
+                    );
+                    spark.position.copy(ball.position);
+                    spark.position.x += (Math.random() - 0.5) * 0.3;
+                    spark.position.z += (Math.random() - 0.5) * 0.3;
+                    scene.add(spark);
+
+                    activeDebris.push({
+                        mesh: spark,
+                        vx: (Math.random() - 0.5) * 1.5,
+                        vy: 2 + Math.random() * 2,
+                        vz: (Math.random() - 0.5) * 1.5,
+                        rotX: 0, rotY: 0,
+                        life: 0.35
+                    });
+                }
 
                 if (feverDuration <= 0) {
                     isFeverMode = false;
                     feverAmount = 0;
                     ballGlow.material.opacity = 0;
+                    ballGlow.scale.setScalar(1.25);
                     pointLight.intensity = 0;
                 }
             } else {
-                // Diminuir barra de fogo aos poucos quando parado (decai mais rápido em níveis altos)
+                // Diminuir barra de fogo suavemente quando parado
                 if (!isPressing && feverAmount > 0) {
-                    const decayRate = 12 + (level * 0.18);
+                    const decayRate = 8 + (level * 0.12);
                     feverAmount = Math.max(0, feverAmount - dt * decayRate);
                 }
             }
@@ -1041,7 +1198,8 @@
             // Renderizar Cena 3D
             renderer.render(scene, camera);
         }
-         // Inicialização Completa
+
+        // Inicialização Completa
         window.onload = () => {
             initThree();
             createBall();
